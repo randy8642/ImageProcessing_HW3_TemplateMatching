@@ -113,8 +113,8 @@ w, h = template_gray.shape[::-1]
 for pt in result_point:
     cv2.rectangle(img_res, (pt[1] - w//2, pt[0] - h//2), (pt[1] + w//2, pt[0] + h//2), (0, 0, 255), 2)
 
-# cv2.imshow('result', img_res)
-# cv2.waitKey(0)
+cv2.imshow('result', img_res)
+cv2.waitKey(0)
 
-plt.imshow(img_res)
-plt.show()
+# plt.imshow(img_res)
+# plt.show()

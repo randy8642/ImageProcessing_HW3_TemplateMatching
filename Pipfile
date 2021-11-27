@@ -9,7 +9,6 @@ matplotlib = "*"
 opencv-python = "*"
 ipykernel = "*"
 scipy = "*"
-tensorflow = "*"
 
 [dev-packages]
 
