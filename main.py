@@ -4,146 +4,117 @@ import time
 import os
 import matplotlib.pyplot as plt
 import itertools
-from scipy.signal import convolve2d, correlate2d
+import queue
 
-img = cv2.imread('./source/100-4.jpg')
-template = cv2.imread('./template/100-Template.jpg')
+from numpy.core.fromnumeric import argsort
+from functions import change2ConvView
 
-img = img[:, :, 2]*0.299 + img[:, :, 1]*0.587 + img[:, :, 0]*0.114
-img = img.astype(np.uint8)
+img = cv2.imread('./source/Die1.tif')
+template = cv2.imread('./template/Die-Template.tif')
 
-template = template[:, :, 2]*0.299 + template[:, :, 1]*0.587 + template[:, :, 0]*0.114
-template = template.astype(np.uint8)
+img_gray = img[:, :, 2]*0.299 + img[:, :, 1]*0.587 + img[:, :, 0]*0.114
+img_gray = img_gray.astype(np.uint8)
 
-def matching(simg, stempl):
-    dst = cv2.Canny(stempl, 200, 1)
-    featureMap = dst > 0
+template_gray = template[:, :, 2]*0.299 + template[:, :, 1]*0.587 + template[:, :, 0]*0.114
+template_gray = template_gray.astype(np.uint8)
 
-    # dst = cv2.cornerHarris(stempl, 2, 3, 0.04)
-    # a = (dst - dst.min()) / (dst.max() - dst.min()) * 255
-    # a = np.abs(a)
-    # featureMap = a < 140
+# sub sampling
+sample_imgs = [img_gray]
+sample_templates = [template_gray]
 
+for _ in range(3):
+    sample_imgs.append(sample_imgs[-1][::2, ::2])
+    sample_templates.append(sample_templates[-1][::2, ::2])
 
-    # pad
-    pad = np.array(stempl.shape) // 2
-    padded_x = np.ones([simg.shape[0] + pad[0]*2, simg.shape[1] + pad[1]*2]) * 0
-    padded_x[pad[0]:-pad[0], pad[1]:-pad[1]] = simg
+sample_imgs = [cv2.Canny(i, 200, 250) for i in sample_imgs]
+sample_templates = [cv2.Canny(i, 200, 250) for i in sample_templates]
 
-    simg = padded_x
+# init. task
+init_level = len(sample_imgs) - 1
+
+que = queue.Queue()
+
+# [init_level], [start_point], [w], [h]
+que.put([init_level, np.array([0, 0]), sample_imgs[-1].shape[1], sample_imgs[-1].shape[0]])
+
+result_point = []
+while True:
+    if que.empty():
+        break    
     
-    # sobel 
-    Sx = np.array([[1, 0, -1],
-               [2, 0, -2],
-               [1, 0, -1]])
-    Sy = np.array([[1, 2, 1],
-                [0, 0, 0],
-                [-1, -2, -1]])
+    now_level, start_point, subimage_w, subImage_h = que.get()  
 
-    # template gradient
-    d = np.empty([*stempl.shape, 2])
-    d[:, :, 0] = convolve2d(stempl, Sx, mode='same', boundary='fill', fillvalue=0)
-    d[:, :, 1] = convolve2d(stempl, Sy, mode='same', boundary='fill', fillvalue=0)
+    now_template = sample_templates[now_level]
+    now_img = sample_imgs[now_level][start_point[0]:start_point[0] + subImage_h, start_point[1]:start_point[1] + subimage_w]
 
-    # feature position
-    p = np.empty([*stempl.shape, 2], dtype=np.int32)    
-    for x, y in itertools.product(range(stempl.shape[0]), range(stempl.shape[1])):
-        p[x, y, :] = [x, y]
-    
-    # image grsdient
-    e = np.empty([*simg.shape, 2])
-    e[:, :, 0] = convolve2d(simg, Sx, mode='same', boundary='fill', fillvalue=0)
-    e[:, :, 1] = convolve2d(simg, Sy, mode='same', boundary='fill', fillvalue=0)
 
-    d = d[featureMap]
-    p = p[featureMap]
+    sub_matrices = change2ConvView(now_img, now_template)
 
-    res = np.zeros(simg.shape)
-    for qx, qy in itertools.product(range(simg.shape[0] - stempl.shape[0]), range(simg.shape[1] - stempl.shape[1])):
-        
-        ps = p + [qx, qy]
-        e_part = e[ps[:, 0], ps[:, 1]]
-        res[qx, qy] = np.mean(np.nan_to_num((np.sum(e_part * d, axis=-1)) / np.sqrt((d[:, 0]**2 + d[:, 1]**2) * (e_part[:, 0]**2 + e_part[:, 1]**2))))
-    
-    return res[:-stempl.shape[0], :-stempl.shape[1]]
+    #
+    template_h, template_w = now_template.shape
+    T_norm = now_template - np.mean(now_template)  
+    I_norm_mean = np.einsum('klij->kl', sub_matrices) / (template_w*template_h)
 
-def search(init_position, w, h, level:int):
-    
-    if level < 0:
-        return []    
-
-   
-    # matching
-    h_upper = init_position[0] + h
-    h_lower = init_position[0]
-    w_upper = init_position[1] + w
-    w_lower = init_position[1]       
-    
-    conv_img = matching(imgs[level][h_lower:h_upper, w_lower:w_upper], templates[level])
+    #
+    m = np.einsum('ij,klij->kl', T_norm, sub_matrices)
+    n = I_norm_mean * np.sum(T_norm)
 
     
+    T_norm_square_sum = np.sum(T_norm**2)    
+    I_norm_square_sum = np.einsum('klij,klij->kl', sub_matrices, sub_matrices) \
+                    - 2 * np.einsum('klij->kl', sub_matrices) * I_norm_mean \
+                    + (template_w*template_h) * I_norm_mean**2
 
-    # find points larger than threshold
-    threshold = 0.8
-    norm_result = (conv_img - conv_img.min()) / (conv_img.max() - conv_img.min())
-    loc = np.where( norm_result >= threshold)
+    R = (m - n) / np.sqrt(T_norm_square_sum * I_norm_square_sum)
+
+    # 
+    threshold = 0.2
+    loc = np.where( R >= threshold)
+  
     
-    # remove same points
-    target_position = []
+    #
+    targetPoint = []
     for n, (x, y) in enumerate(zip(*loc)):
         if n == 0:
-            target_position.append([x, y])
-            continue
-        
-        store = True
-        for point in target_position:
-            distance = np.sqrt((point[0] - x)**2 + (point[1] - y)**2)
-            if distance < imgs[level].shape[0] * 0.15:
-                store = False
-                break
-        
-        if store:        
-            target_position.append([x, y])
-    
-
-    if len(target_position) == 0:
-        return []
-
-    target_position = np.array(target_position) - np.array(templates[level].shape)//2
-   
-
-
-    # upsample
-    results = []
-    for search_center in target_position:
-        search_center = np.array(search_center)
-        if level == 0:            
-            return [search_center + init_position]
+            targetPoint.append([x, y])
         else:
-            result = search((search_center + init_position) * 2, templates[level-1].shape[1], templates[level-1].shape[0] , level=level-1)
-            results.extend(result)
+            dis = [np.sqrt((x-i)**2 + (y-j)**2) for i, j in targetPoint]
+            dis_sort = np.argsort(dis)
+            sim = [R[i, j] for i, j in targetPoint]
+                        
+            if dis[dis_sort[0]] > sample_imgs[now_level].shape[1]*0.1:
+                targetPoint.append([x, y])
+            else:
+                if R[x, y] > sim[dis_sort[0]]:
+                    del targetPoint[dis_sort[0]]
+                    targetPoint.append([x, y])
+            
+
     
-    return results
+    if len(targetPoint) <= 0:       
+        continue
 
-# copys
-imgs = []
-imgs.append(img)
+    targetPoint = np.array(targetPoint) + start_point
+    
+    #
+    if now_level == 1:               
+        result_point.extend(targetPoint*2)
+    else:
+        for x, y in targetPoint:
+            h_upper = x - int(now_template.shape[0]*0.5) if x - now_template.shape[0]*0.5 > 0 else 0
+            w_upper = y - int(now_template.shape[1]*0.5) if y - now_template.shape[1]*0.5 > 0 else 0
 
-templates = []
-templates.append(template)
-
-n_subsample = 3
-
-for i in range(n_subsample):
-    imgs.append(imgs[-1][::2, ::2])
-    templates.append(templates[-1][::2, ::2])
-
-tar = search(np.array([0, 0]), imgs[-1].shape[1], imgs[-1].shape[0], level=len(imgs)-1)
+            que.put([now_level-1, np.array([h_upper, w_upper])*2, int(now_template.shape[1]*2), int(now_template.shape[0]*2)])
 
 
-img_res = imgs[0].copy()
-for pt in tar:  
-    cv2.rectangle(img_res, pt[::-1], (pt[1] + templates[0].shape[1], pt[0] + templates[0].shape[0]), (0, 0, 255), 2)
-plt.figure(figsize=(10, 10))
-plt.imshow(img_res, cmap='gray')
+img_res = img.copy()
+w, h = template_gray.shape[::-1]
+
+for pt in result_point:
+    cv2.rectangle(img_res, (pt[1] - w//2, pt[0] - h//2), (pt[1] + w//2, pt[0] + h//2), (0, 0, 255), 2)
+
+# cv2.imshow('result', img_res)
+# cv2.waitKey(0)
+
+plt.imshow(img_res)
 plt.show()
