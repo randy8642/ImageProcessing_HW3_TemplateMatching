@@ -1,16 +1,13 @@
 import cv2
 import numpy as np
-import time
-import os
-import matplotlib.pyplot as plt
-import itertools
 import queue
+from functions import change2ConvView, createSubsampleImgs
 
-from numpy.core.fromnumeric import argsort
-from functions import change2ConvView
+imgName = 'Die1.tif'
+templateName = 'Die-Template.tif'
 
-img = cv2.imread('./source/Die1.tif')
-template = cv2.imread('./template/Die-Template.tif')
+img = cv2.imread(f'./source/{imgName}')
+template = cv2.imread(f'./template/{templateName}')
 
 img_gray = img[:, :, 2]*0.299 + img[:, :, 1]*0.587 + img[:, :, 0]*0.114
 img_gray = img_gray.astype(np.uint8)
@@ -19,15 +16,7 @@ template_gray = template[:, :, 2]*0.299 + template[:, :, 1]*0.587 + template[:, 
 template_gray = template_gray.astype(np.uint8)
 
 # sub sampling
-sample_imgs = [img_gray]
-sample_templates = [template_gray]
-
-for _ in range(3):
-    sample_imgs.append(sample_imgs[-1][::2, ::2])
-    sample_templates.append(sample_templates[-1][::2, ::2])
-
-sample_imgs = [cv2.Canny(i, 200, 250) for i in sample_imgs]
-sample_templates = [cv2.Canny(i, 200, 250) for i in sample_templates]
+sample_imgs, sample_templates = createSubsampleImgs(img_gray, template_gray)
 
 # init. task
 init_level = len(sample_imgs) - 1
@@ -37,7 +26,7 @@ que = queue.Queue()
 # [init_level], [start_point], [w], [h]
 que.put([init_level, np.array([0, 0]), sample_imgs[-1].shape[1], sample_imgs[-1].shape[0]])
 
-result_point = []
+results = []
 while True:
     if que.empty():
         break    
@@ -68,7 +57,7 @@ while True:
     R = (m - n) / np.sqrt(T_norm_square_sum * I_norm_square_sum)
 
     # 
-    threshold = 0.2
+    threshold = 0.65
     loc = np.where( R >= threshold)
   
     
@@ -97,8 +86,8 @@ while True:
     targetPoint = np.array(targetPoint) + start_point
     
     #
-    if now_level == 1:               
-        result_point.extend(targetPoint*2)
+    if now_level == 1:          
+        results.append([(targetPoint[0]*2).tolist(), R[(targetPoint[0]-start_point)[0], (targetPoint[0]-start_point)[1]]])
     else:
         for x, y in targetPoint:
             h_upper = x - int(now_template.shape[0]*0.5) if x - now_template.shape[0]*0.5 > 0 else 0
@@ -106,15 +95,34 @@ while True:
 
             que.put([now_level-1, np.array([h_upper, w_upper])*2, int(now_template.shape[1]*2), int(now_template.shape[0]*2)])
 
+# 移除重複目標框
+deduplicate_results = []
+for n, ((x, y), sim) in enumerate(results):
+    if n == 0:
+        deduplicate_results.append([[x, y], sim])
+    else:
+        dis = [np.sqrt((x-i)**2 + (y-j)**2) for (i, j), s in deduplicate_results]
+        dis_sort = np.argsort(dis)
+                    
+        if dis[dis_sort[0]] > sample_imgs[now_level].shape[1]*0.1:
+            deduplicate_results.append([[x, y], sim])
+        else:
+            if sim > deduplicate_results[dis_sort[0]][1]:
+                del deduplicate_results[dis_sort[0]]
+                deduplicate_results.append([[x, y], sim])
 
+#
 img_res = img.copy()
 w, h = template_gray.shape[::-1]
 
-for pt in result_point:
+for pt, similarity in deduplicate_results:
     cv2.rectangle(img_res, (pt[1] - w//2, pt[0] - h//2), (pt[1] + w//2, pt[0] + h//2), (0, 0, 255), 2)
+for pt, similarity in deduplicate_results:
+    cv2.putText(img_res, f'center [{pt[1]},{pt[0]}]', (pt[1] - 50, pt[0] - 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1, cv2.LINE_AA)
+    cv2.putText(img_res, f'score {round(similarity, 3)}', (pt[1] - 50, pt[0] - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1, cv2.LINE_AA)
 
-cv2.imshow('result', img_res)
-cv2.waitKey(0)
+# cv2.imshow('result', img_res)
+# cv2.waitKey(0)
 
-# plt.imshow(img_res)
-# plt.show()
+imgbaseName = imgName.split('.')[0]
+cv2.imwrite(f'./result/{imgbaseName}.jpg', img_res)
