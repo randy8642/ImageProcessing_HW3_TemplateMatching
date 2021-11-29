@@ -4,15 +4,10 @@ from scipy.signal import convolve2d
 import queue
 
 def change2ConvView(x, y):
-    # pad
-    pad = np.array(y.shape) // 2
-    padded_img_gray = np.ones([x.shape[0] + pad[0]*2, x.shape[1] + pad[1]*2]) * 0
-    padded_img_gray[pad[0]:-pad[0], pad[1]:-pad[1]] = x
-
     # change view for conv
-    view_shape = tuple(np.subtract(padded_img_gray.shape, y.shape) + 1) + y.shape
-    strides = padded_img_gray.strides + padded_img_gray.strides
-    sub_matrices = np.lib.stride_tricks.as_strided(padded_img_gray, view_shape, strides)
+    view_shape = tuple(np.subtract(x.shape, y.shape) + 1) + y.shape
+    strides = x.strides + x.strides
+    sub_matrices = np.lib.stride_tricks.as_strided(x, view_shape, strides)
 
     return sub_matrices
 
@@ -25,12 +20,6 @@ def createSubsampleImgs(originImage, originTemplate):
         sample_templates.append(sample_templates[-1][::2, ::2])
     
     return sample_imgs, sample_templates
-
-def cannyEdgeDetect(img, threshold):
-
-
-
-    return 0
 
 def deduplicate(location: np.ndarray, similarity: np.ndarray, threshold):
     results_location = []
@@ -55,36 +44,37 @@ def templateMatching(img, temp):
     sub_matrices = change2ConvView(img, temp)
 
     #
-    h, w = temp.shape
+    template_h, template_w = temp.shape
     T_norm = temp - np.mean(temp)  
-    I_norm_mean = np.einsum('klij->kl', sub_matrices) / (w*h)
+    I_norm_mean = np.einsum('klij->kl', sub_matrices) / (template_w*template_h)
 
     #
     m = np.einsum('ij,klij->kl', T_norm, sub_matrices)
     n = I_norm_mean * np.sum(T_norm)
 
     
-    T_norm_square_sum = np.sum(T_norm**2)    
-    I_norm_square_sum = np.einsum('klij,klij->kl', sub_matrices, sub_matrices) \
+    T_norm_sum = np.sum(T_norm**2)
+    
+    I_norm_sum = np.einsum('klij,klij->kl', sub_matrices, sub_matrices) \
                     - 2 * np.einsum('klij->kl', sub_matrices) * I_norm_mean \
-                    + (w*h) * I_norm_mean**2
+                    + (template_w*template_h) * I_norm_mean**2
 
-    R = (m - n) / np.sqrt(T_norm_square_sum * I_norm_square_sum)
+    R = (m - n) / np.sqrt(T_norm_sum * I_norm_sum)
 
     return R
 
 def drawRec(img, loc, sim, t_w, t_h):
     for pt, similarity in zip(loc, sim):
-        cv2.rectangle(img, (pt[1] - t_w//2, pt[0] - t_h//2), (pt[1] + t_w//2, pt[0] + t_h//2), (0, 0, 255), 2)
+        cv2.rectangle(img, (pt[1], pt[0]), (pt[1] + t_w, pt[0] + t_h), (0, 0, 255), 2)
     for pt, similarity in zip(loc, sim):
-        cv2.putText(img, f'center [{pt[1]},{pt[0]}]', (pt[1] - 50, pt[0] - 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1, cv2.LINE_AA)
-        cv2.putText(img, f'score {round(similarity, 3)}', (pt[1] - 50, pt[0] - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1, cv2.LINE_AA)
+        cv2.putText(img, f'center [{pt[1] + t_w//2},{pt[0] + t_h//2}]', (pt[1] + t_w//2 - 50, pt[0] + t_h//2 - 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1, cv2.LINE_AA)
+        cv2.putText(img, f'score {round(similarity, 3)}', (pt[1] + t_w//2 - 50, pt[0] + t_h//2 - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1, cv2.LINE_AA)
 
     return img
 
 def convertBGR2GRAY(img):
     res = img[:, :, 2]*0.299 + img[:, :, 1]*0.587 + img[:, :, 0]*0.114
-    res = res.astype(np.uint8)
+    res = res.astype(np.float32)
     return res
 
 def speedUp_subsample(img, templ, tm_function, threshold):
@@ -100,15 +90,49 @@ def speedUp_subsample(img, templ, tm_function, threshold):
     results_loc = []
     results_sim = []
     while not que.empty():
-        now_level, start_point, subimage_w, subImage_h = que.get()  
+        now_level, start_point, subimage_w, subimage_h = que.get()  
 
         now_template = sample_templates[now_level]
-        now_img = sample_imgs[now_level][start_point[0]:start_point[0] + subImage_h, start_point[1]:start_point[1] + subimage_w]
+        now_img = sample_imgs[now_level]
 
-        R = tm_function(now_img, now_template)
+        template_h, template_w = now_template.shape
+
+        h_upper = start_point[0] - 10
+        h_lower = start_point[0] + subimage_h + 10
+        w_upper = start_point[1] - 10
+        w_lower = start_point[1] + subimage_w + 10
+
+        if h_upper < 0:
+            h_upper = 0
+        if h_lower >= now_img.shape[0]:
+            h_lower = now_img.shape[0]
+        if w_upper < 0:
+            w_upper = 0
+        if w_lower >= now_img.shape[1]:
+            w_lower = now_img.shape[1]
+
+        cut_img = now_img[h_upper:h_lower, w_upper:w_lower]
+    
+
+        # pad
+        if (now_template.shape[0] >= cut_img.shape[0]) or (now_template.shape[1] >= cut_img.shape[1]):
+            pad = np.array([now_template.shape[0] - cut_img.shape[0], now_template.shape[1] - cut_img.shape[1]], dtype=np.int32) //2 
+        
+            pad[pad >= 0] += 4
+            pad[pad < 0] = 0
+        
+            padded_img_gray = np.pad(cut_img, [[pad[0], pad[0]], [pad[1], pad[1]]])
+        else:
+            padded_img_gray = cut_img
+
+
+        R = tm_function(padded_img_gray, now_template)
 
         #     
-        loc = np.where( R >= threshold)
+        if now_level == len(sample_imgs) - 1:
+            loc = np.where( R >= threshold)
+        else:
+            loc = np.where( R >= R.max())
 
         points_loc = np.array([[i, j] for i, j in zip(*loc)])
         points_sim = np.array([R[i, j] for i, j in zip(*loc)])
@@ -117,16 +141,17 @@ def speedUp_subsample(img, templ, tm_function, threshold):
         if len(targetPoint) <= 0:       
             continue    
         #
-        if now_level == 1:  
-            results_loc.append((targetPoint[0] + start_point)*2)      
+        if now_level == 0:  
+            results_loc.append((targetPoint[0] + np.array([h_upper, w_upper])))      
             results_sim.append(R[(targetPoint[0])[0], (targetPoint[0])[1]])  
             continue    
         #
-        targetPoint = targetPoint + start_point
+        targetPoint = targetPoint + np.array([h_upper, w_upper]) + [template_h//2, template_w//2]
+    
         for x, y in targetPoint:
-            h_upper = x - int(now_template.shape[0]*0.5) if x - now_template.shape[0]*0.5 > 0 else 0
-            w_upper = y - int(now_template.shape[1]*0.5) if y - now_template.shape[1]*0.5 > 0 else 0
+            x_init = x - int(now_template.shape[0]*0.5) if x - now_template.shape[0]*0.5 > 0 else 0
+            y_init = y - int(now_template.shape[1]*0.5) if y - now_template.shape[1]*0.5 > 0 else 0
 
-            que.put([now_level-1, np.array([h_upper, w_upper])*2, int(now_template.shape[1]*2), int(now_template.shape[0]*2)])
+            que.put([now_level-1, (np.array([x_init, y_init]))*2, int((now_template.shape[1])*2), int((now_template.shape[0])*2)])
     
     return results_loc, results_sim

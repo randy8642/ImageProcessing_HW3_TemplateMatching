@@ -11,13 +11,9 @@ def main(imgPath: str, templatePath: str, threshold: float):
     template_gray = convertBGR2GRAY(template)
 
     results_loc, results_sim = speedUp_subsample(img_gray, template_gray, templateMatching, threshold)
-
-    # 移除重複目標框
-    res_loc, res_sim = deduplicate(np.array(results_loc), np.array(results_sim), img_gray.shape[1]*0.1)
-
-    #
-    img_result = drawRec(img.copy(), res_loc, res_sim, *template_gray.shape[::-1])
-
+    
+    # img_result = drawRec(img.copy(), results_loc, results_sim, *template_gray.shape[::-1])
+    
     # cv2.imshow('result', img_result)
     # cv2.waitKey(0)
 
@@ -25,8 +21,8 @@ def main(imgPath: str, templatePath: str, threshold: float):
     # cv2.imwrite(f'./result/{imgbaseName}.jpg', img_res)
 
 if __name__ == '__main__':   
-    imgPath = './source/100-4.jpg'
-    templatePath = './template/100-Template.jpg'
+    imgPath = './source/Die1.tif'
+    templatePath = './template/Die-Template.tif'
     threshold = 0.6
 
     import time
