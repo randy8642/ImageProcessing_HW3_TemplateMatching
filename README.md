@@ -18,9 +18,8 @@
 ![](/sample/100-MatchResult.jpg)
 ![](/sample/Die-MatchResult.jpg)
 
-
-## 處理過程說明
-### Step 1 : 轉為單通道影像
+## 功能實現
+### RGB to Gray(single channel)
 ```python
 def convertBGR2GRAY(img):
    res = img[:, :, 2]*0.299 + img[:, :, 1]*0.587 + img[:, :, 0]*0.114
@@ -28,7 +27,7 @@ def convertBGR2GRAY(img):
    return res
 ```
 
-### Step 2 : Downsampling Image and Template
+### Downsampling 
 ```python
 def createSubsampleImgs(originImage, originTemplate):
    sample_imgs = [originImage]
@@ -41,6 +40,69 @@ def createSubsampleImgs(originImage, originTemplate):
    
    return sample_imgs, sample_templates
 ```
+
+### Template Matching
+使用Normalized Correlation Coefficient計算圖片與模板的相似度
+```python
+def templateMatching(img, temp):
+   # 將圖片依照模板大小重新排列/裁切
+   sub_matrices = change2ConvView(img, temp)
+
+   # 取得模板的長寬
+   template_h, template_w = temp.shape
+
+   # 計算normalized Template
+   T_norm = temp - np.mean(temp)
+   # 計算normalized mean Image  
+   I_norm_mean = np.einsum('klij->kl', sub_matrices) / (template_w*template_h)
+
+   # 分子部分
+   m = np.einsum('ij,klij->kl', T_norm, sub_matrices)
+   n = I_norm_mean * np.sum(T_norm)
+
+   # 分母部分
+   T_norm_sum = np.sum(T_norm**2)   
+   I_norm_sum = np.einsum('klij,klij->kl', sub_matrices, sub_matrices) \
+                  - 2 * np.einsum('klij->kl', sub_matrices) * I_norm_mean \
+                  + (template_w*template_h) * I_norm_mean**2
+
+   # 結果
+   R = (m - n) / np.sqrt(T_norm_sum * I_norm_sum)
+
+   return R
+```
+
+### de-duplicate
+```python
+def deduplicate(location: np.ndarray, similarity: np.ndarray, threshold):
+   results_location = []
+   results_sim = []
+
+   while len(location) > 0:    
+      p = location[0]        
+
+      # 計算p點到其他目標點的距離
+      distance = np.sqrt(np.sum((location - p)**2, axis=1))
+      # 找出距離過近的點
+      nearPoint = np.argwhere(distance < threshold).flatten()
+
+      # 找出這些點之中相似度最高的點
+      sim_argmax = np.argmax(similarity[nearPoint])
+      # 保留該點
+      results_location.append(location[nearPoint][sim_argmax])
+      results_sim.append(similarity[nearPoint][sim_argmax])
+      # 刪除其他點
+      location = np.delete(location, nearPoint, axis=0)
+      similarity = np.delete(similarity, nearPoint, axis=0) 
+   
+   return np.array(results_location), np.array(results_sim)
+```
+
+
+## 處理過程說明
+### Step 1 : 轉為單通道影像
+
+### Step 2 : Downsampling Image and Template
 
 ### Step 3 : 對最小的圖片執行Template Matching
 ```python

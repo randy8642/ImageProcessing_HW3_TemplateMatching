@@ -28,13 +28,17 @@ def deduplicate(location: np.ndarray, similarity: np.ndarray, threshold):
     while len(location) > 0:    
         p = location[0]        
 
+        # 計算p點到其他目標點的距離
         distance = np.sqrt(np.sum((location - p)**2, axis=1))
+        # 找出距離過近的點
         nearPoint = np.argwhere(distance < threshold).flatten()
 
+        # 找出這些點之中相似度最高的點
         sim_argmax = np.argmax(similarity[nearPoint])
+        # 保留該點
         results_location.append(location[nearPoint][sim_argmax])
         results_sim.append(similarity[nearPoint][sim_argmax])
-
+        # 刪除其他點
         location = np.delete(location, nearPoint, axis=0)
         similarity = np.delete(similarity, nearPoint, axis=0) 
     
