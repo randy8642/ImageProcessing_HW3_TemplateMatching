@@ -9,6 +9,8 @@ matplotlib = "*"
 opencv-python = "*"
 ipykernel = "*"
 scipy = "*"
+pandas = "*"
+tabulate = "*"
 
 [dev-packages]
 

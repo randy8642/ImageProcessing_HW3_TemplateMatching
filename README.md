@@ -19,8 +19,77 @@
 ![](/sample/Die-MatchResult.jpg)
 
 
-## 功能實現
-
 ## 處理過程說明
+### Step 1 : 轉為單通道影像
+```python
+def convertBGR2GRAY(img):
+   res = img[:, :, 2]*0.299 + img[:, :, 1]*0.587 + img[:, :, 0]*0.114
+   res = res.astype(np.float32)
+   return res
+```
+
+### Step 2 : Downsampling Image and Template
+```python
+def createSubsampleImgs(originImage, originTemplate):
+   sample_imgs = [originImage]
+   sample_templates = [originTemplate]
+
+   # 取影像的奇數行與列來縮小影像大小
+   for _ in range(3):
+      sample_imgs.append(sample_imgs[-1][::2, ::2])
+      sample_templates.append(sample_templates[-1][::2, ::2])
+   
+   return sample_imgs, sample_templates
+```
+
+### Step 3 : 對最小的圖片執行Template Matching
+```python
+
+```
+
+### Step 4 : 使用目標點對較大圖片裁切
+```python
+
+```
+
+### Step 5 : 在裁切後的較大圖片執行Template Matching
+```python
+
+```
+
+### Step 6 : 在原圖繪製目標框
+```python
+
+```
+
+### Step 7 : 儲存圖片
+```python
+
+```
 
 ## 處理結果
+### 樣張1
+![](/source/100-1.jpg)
+![](/result/100-1.jpg)
+### 樣張2
+![](/source/100-2.jpg)
+![](/result/100-2.jpg)
+### 樣張3
+![](/source/100-3.jpg)
+![](/result/100-3.jpg)
+### 樣張4
+![](/source/100-4.jpg)
+![](/result/100-4.jpg)
+### 樣張5
+![](/source/Die1.jpg)
+![](/result/Die1.jpg)
+### 樣張6
+![](/source/Die2.jpg)
+![](/result/Die2.jpg)
+
+## 與OpenCV比較
+使用`100-1.jpg`/`100-21.jpg`/`100-3.jpg`/`100-4.jpg`共4張圖重複執行5次的平均結果比較
+| method          |  costTime   |
+|:----------------|------------:|
+| OpenCV function |  0.113902 s |
+| Self-developed  |  0.236849 s |

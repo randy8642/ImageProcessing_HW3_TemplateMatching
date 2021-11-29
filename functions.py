@@ -1,6 +1,5 @@
 import numpy as np
 import cv2
-from scipy.signal import convolve2d
 import queue
 
 def change2ConvView(x, y):
@@ -15,6 +14,7 @@ def createSubsampleImgs(originImage, originTemplate):
     sample_imgs = [originImage]
     sample_templates = [originTemplate]
 
+    # 取影像的奇數行與列來縮小影像大小
     for _ in range(3):
         sample_imgs.append(sample_imgs[-1][::2, ::2])
         sample_templates.append(sample_templates[-1][::2, ::2])
