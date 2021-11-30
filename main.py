@@ -14,13 +14,13 @@ def main(imgPath: str, templatePath: str, threshold: float):
 
     results_loc, results_sim = speedUp_subsample(img_gray, template_gray, templateMatching, threshold)
     
-    # img_result = drawRec(img.copy(), results_loc, results_sim, *template_gray.shape[::-1])
+    img_result = drawRec(img.copy(), results_loc, results_sim, *template_gray.shape[::-1])
     
     # cv2.imshow('result', img_result)
     # cv2.waitKey(0)
 
-    # imgbaseName = os.path.basename(imgPath).split('.')[0]
-    # cv2.imwrite(f'./result/{imgbaseName}.jpg', img_result)
+    imgbaseName = os.path.basename(imgPath).split('.')[0]
+    cv2.imwrite(f'./result/{imgbaseName}.jpg', img_result)
 
 if __name__ == '__main__':   
     imgPath = './source/100-4.jpg'

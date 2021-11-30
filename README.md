@@ -98,35 +98,51 @@ def deduplicate(location: np.ndarray, similarity: np.ndarray, threshold):
    return np.array(results_location), np.array(results_sim)
 ```
 
+### 繪製目標框
+先繪製框線，再繪製中心點座標以及相似度，以避免遮檔
+```python
+def drawRec(img, loc, sim, t_w, t_h):
+   for pt, similarity in zip(loc, sim):
+      cv2.rectangle(img, (pt[1], pt[0]), (pt[1] + t_w, pt[0] + t_h), (0, 0, 255), 2)
+   for pt, similarity in zip(loc, sim):
+      cv2.putText(img, f'center [{pt[1] + t_w//2},{pt[0] + t_h//2}]', (pt[1] + t_w//2 - 50, pt[0] + t_h//2 - 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1, cv2.LINE_AA)
+      cv2.putText(img, f'score {similarity:.4}', (pt[1] + t_w//2 - 50, pt[0] + t_h//2 - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1, cv2.LINE_AA)
+
+   return img
+```
+
 
 ## 處理過程說明
-### Step 1 : 轉為單通道影像
-
-### Step 2 : Downsampling Image and Template
-
-### Step 3 : 對最小的圖片執行Template Matching
+### Step 1 : 讀取影像並轉為灰階(單通道)
 ```python
+img = cv2.imread(imgPath)
+template = cv2.imread(templatePath)
 
+img_gray = convertBGR2GRAY(img)
+template_gray = convertBGR2GRAY(template)
 ```
 
-### Step 4 : 使用目標點對較大圖片裁切
+### Step 2 : Template Matching
 ```python
+results_loc, results_sim = \
+   speedUp_subsample(img_gray, template_gray, templateMatching, threshold)
+```
+細部過程
+1. 將影像降採樣3次  
+   ```python
+   sample_imgs, sample_templates = createSubsampleImgs(img, templ)
+   ```
+2. 從最低解析度
 
+### Step 3 : 在原圖繪製目標框
+```python
+img_result = drawRec(img.copy(), results_loc, results_sim, *template_gray.shape[::-1])
 ```
 
-### Step 5 : 在裁切後的較大圖片執行Template Matching
+### Step 4 : 儲存圖片
 ```python
-
-```
-
-### Step 6 : 在原圖繪製目標框
-```python
-
-```
-
-### Step 7 : 儲存圖片
-```python
-
+imgbaseName = os.path.basename(imgPath).split('.')[0]
+cv2.imwrite(f'./result/{imgbaseName}.jpg', img_result)
 ```
 
 ## 處理結果
