@@ -25,7 +25,7 @@
 ## 使用說明
 1. 下載專案
 2. 移至專案目錄\
-`cd /d ImageProcessing_HW1_BarcodeBeadsDetection`
+`cd /d ImageProcessing_HW3_TemplateMatching`
 2. 安裝所需套件\
 `pipenv install`
 
