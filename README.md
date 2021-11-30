@@ -255,7 +255,7 @@ cv2.imwrite(f'./result/{imgbaseName}.jpg', img_result)
 ![](/result/Die2.jpg)
 
 ## 與OpenCV比較
-使用`100-1.jpg`/`100-21.jpg`/`100-3.jpg`/`100-4.jpg`共4張圖重複執行5次的平均結果比較
+使用`100-1.jpg`/`100-2.jpg`/`100-3.jpg`/`100-4.jpg`共4張圖重複執行5次的平均結果比較
 | method          |  costTime   |
 |:----------------|------------:|
 | OpenCV function |  0.113902 s |
