@@ -18,6 +18,20 @@
 ![](/sample/100-MatchResult.jpg)
 ![](/sample/Die-MatchResult.jpg)
 
+## 環境
+- python v3.9 [網站](https://pipenv-fork.readthedocs.io/en/latest/)
+- pipenv 套件管理工具 [網站](https://pipenv-fork.readthedocs.io/en/latest/) 
+
+## 使用說明
+1. 下載專案
+2. 移至專案目錄\
+`cd /d ImageProcessing_HW1_BarcodeBeadsDetection`
+2. 安裝所需套件\
+`pipenv install`
+
+## 執行
+`python main.py --img ./source/100-4.jpg --template ./template/100-Template.jpg`
+
 ## 功能實現
 ### RGB to Gray(single channel)
 ```python
