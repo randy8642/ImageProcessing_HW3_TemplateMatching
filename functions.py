@@ -101,6 +101,7 @@ def speedUp_subsample(img, templ, tm_function, threshold):
 
         template_h, template_w = now_template.shape
 
+        # 裁切影像
         h_upper = start_point[0] - 10
         h_lower = start_point[0] + subimage_h + 10
         w_upper = start_point[1] - 10
@@ -117,7 +118,7 @@ def speedUp_subsample(img, templ, tm_function, threshold):
 
         cut_img = now_img[h_upper:h_lower, w_upper:w_lower]
     
-
+        
         # pad
         if (now_template.shape[0] >= cut_img.shape[0]) or (now_template.shape[1] >= cut_img.shape[1]):
             pad = np.array([now_template.shape[0] - cut_img.shape[0], now_template.shape[1] - cut_img.shape[1]], dtype=np.int32) //2 

@@ -28,6 +28,7 @@ def convertBGR2GRAY(img):
 ```
 
 ### Downsampling 
+將取圖片的奇數行與列來縮小圖片的解析度
 ```python
 def createSubsampleImgs(originImage, originTemplate):
    sample_imgs = [originImage]
@@ -73,6 +74,7 @@ def templateMatching(img, temp):
 ```
 
 ### de-duplicate
+刪除距離太過接近的目標點，這些點大多代表同一個目標物體
 ```python
 def deduplicate(location: np.ndarray, similarity: np.ndarray, threshold):
    results_location = []
@@ -128,11 +130,66 @@ results_loc, results_sim = \
    speedUp_subsample(img_gray, template_gray, templateMatching, threshold)
 ```
 細部過程
-1. 將影像降採樣3次  
+1. 將影像降採樣數次  
    ```python
    sample_imgs, sample_templates = createSubsampleImgs(img, templ)
    ```
-2. 從最低解析度
+2. 從最低解析度開始做template matching
+   ```python
+   R = templateMatching_function(padded_img_gray, now_template)
+   ```
+3. 找到大於threshold的座標，並清除相近的點
+   ```python
+   if now_level == len(sample_imgs) - 1:
+      loc = np.where( R >= threshold)
+   else:
+      loc = np.where( R >= R.max())
+   ```
+   ```python
+   points_loc = np.array([[i, j] for i, j in zip(*loc)])
+   points_sim = np.array([R[i, j] for i, j in zip(*loc)])
+   targetPoint, _ = deduplicate(points_loc, points_sim, sample_imgs[now_level].shape[1]*0.1)
+   ```
+4. 回到次解析度的圖片，並將目標點附近的影像裁切下來
+   ```python
+   # 計算要裁切的邊界(包含template大小以及附近的幾個pixel)
+   h_upper = start_point[0] - 10
+   h_lower = start_point[0] + subimage_h + 10
+   w_upper = start_point[1] - 10
+   w_lower = start_point[1] + subimage_w + 10
+
+   # 調整超出範圍的部分
+   if h_upper < 0:
+      h_upper = 0
+   if h_lower >= now_img.shape[0]:
+      h_lower = now_img.shape[0]
+   if w_upper < 0:
+      w_upper = 0
+   if w_lower >= now_img.shape[1]:
+      w_lower = now_img.shape[1]
+
+   # 裁切影像
+   cut_img = now_img[h_upper:h_lower, w_upper:w_lower]
+   ```
+5. 判斷裁切的影像大小是否充足，若不充足則使用0填補
+   ```python
+   if (now_template.shape[0] >= cut_img.shape[0]) or (now_template.shape[1] >= cut_img.shape[1]):
+      # 計算差值(需要填補的值)
+      pad = np.array([\
+               now_template.shape[0] - cut_img.shape[0], \
+               now_template.shape[1] - cut_img.shape[1]\
+            ], dtype=np.int32) //2 
+
+      # 多補4個pixel，避免只有1個位置可以計算相似度
+      pad[pad >= 0] += 4
+      pad[pad < 0] = 0
+   
+      padded_img_gray = np.pad(cut_img, [[pad[0], pad[0]], [pad[1], pad[1]]])
+   else:
+      padded_img_gray = cut_img
+   ```
+6. 使用裁切影像執行template matching  
+7. 回到步驟3，重複執行直到原始解析度的影像
 
 ### Step 3 : 在原圖繪製目標框
 ```python
