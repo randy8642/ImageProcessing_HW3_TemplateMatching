@@ -107,8 +107,26 @@ def drawRec(img, loc, sim, t_w, t_h):
    for pt, similarity in zip(loc, sim):
       cv2.rectangle(img, (pt[1], pt[0]), (pt[1] + t_w, pt[0] + t_h), (0, 0, 255), 2)
    for pt, similarity in zip(loc, sim):
-      cv2.putText(img, f'center [{pt[1] + t_w//2},{pt[0] + t_h//2}]', (pt[1] + t_w//2 - 50, pt[0] + t_h//2 - 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1, cv2.LINE_AA)
-      cv2.putText(img, f'score {similarity:.4}', (pt[1] + t_w//2 - 50, pt[0] + t_h//2 - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1, cv2.LINE_AA)
+      cv2.putText(\
+         img, \
+         f'center [{pt[1] + t_w//2},{pt[0] + t_h//2}]', \
+         (pt[1] + t_w//2 - 50, pt[0] + t_h//2 - 40), \
+         cv2.FONT_HERSHEY_SIMPLEX, \
+         0.5, \
+         (0, 255, 255), \
+         1, \
+         cv2.LINE_AA \
+         )
+      cv2.putText(\
+         img, \
+         f'score {similarity:.4}', \
+         (pt[1] + t_w//2 - 50, pt[0] + t_h//2 - 20), \
+         cv2.FONT_HERSHEY_SIMPLEX, \
+         0.5, \
+         (0, 255, 255), \
+         1, \
+         cv2.LINE_AA \
+         )
 
    return img
 ```
