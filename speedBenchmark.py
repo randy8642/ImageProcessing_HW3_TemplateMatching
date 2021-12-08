@@ -48,6 +48,6 @@ for _ in range(10):
         results.append(['Self-developed', f'100-{i}.jpg', costTime])
 
 results = pd.DataFrame(results, columns=['method', 'image', 'costTime'])
-# results.to_csv('./result/benchmark.csv', index=False, header=True, mode='w')
+results.to_csv('./result/benchmark.csv', index=False, header=True, mode='w')
 
 print(results.groupby(['method']).mean().to_markdown())

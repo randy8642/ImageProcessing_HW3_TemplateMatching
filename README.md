@@ -258,5 +258,5 @@ cv2.imwrite(f'./result/{imgbaseName}.jpg', img_result)
 
 | method          |   costTime   |
 |:----------------|-------------:|
-| OpenCV function |  0.0434471 s |
-| Self-developed  |  0.0396262 s |
+| OpenCV function |  0.0430267 s |
+| Self-developed  |  0.0397286 s |
