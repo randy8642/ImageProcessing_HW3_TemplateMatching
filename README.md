@@ -255,6 +255,7 @@ cv2.imwrite(f'./result/{imgbaseName}.jpg', img_result)
 測試程式碼請參考`speedBenchmark.py`檔案
 - openCV使用**matchTemplate**函數
 - self-developed使用subsample和多執行緒加速
+
 | method          |   costTime   |
 |:----------------|-------------:|
 | OpenCV function |  0.0434471 s |
