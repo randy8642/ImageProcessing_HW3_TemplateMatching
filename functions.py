@@ -84,7 +84,7 @@ def convertBGR2GRAY(img):
     return res
 
 
-def speedUp_subsample(img, templ, threshold):
+def speedUp_templateMatching(img, templ, threshold):
     # sub sampling
     sample_imgs, sample_templates = createSubsampleImgs(img, templ)
 

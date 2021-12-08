@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import pandas as pd
 import time
-from functions import convertBGR2GRAY, speedUp_subsample
+from functions import convertBGR2GRAY, speedUp_templateMatching
 
 
 results = []
@@ -41,7 +41,7 @@ for _ in range(10):
         img_gray = convertBGR2GRAY(img)
         template_gray = convertBGR2GRAY(template)
 
-        results_loc, results_sim = speedUp_subsample(img_gray, template_gray, threshold)
+        results_loc, results_sim = speedUp_templateMatching(img_gray, template_gray, threshold)
         
         #
         costTime = time.time() - st
