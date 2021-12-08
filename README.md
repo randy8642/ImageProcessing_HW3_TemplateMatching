@@ -65,7 +65,7 @@ def templateMatching(img, temp):
 
    # 取得模板的長寬
    template_h, template_w = temp.shape
-
+   
    # 計算normalized Template
    T_norm = temp - np.mean(temp)
    # 計算normalized mean Image  
