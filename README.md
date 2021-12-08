@@ -253,6 +253,8 @@ cv2.imwrite(f'./result/{imgbaseName}.jpg', img_result)
 ## 與OpenCV比較
 使用`100-1.jpg`/`100-2.jpg`/`100-3.jpg`/`100-4.jpg`共4張圖重複執行10次的平均結果比較  
 測試程式碼請參考`speedBenchmark.py`檔案
+- openCV使用**matchTemplate**函數
+- self-developed使用subsample和多執行緒加速
 | method          |   costTime   |
 |:----------------|-------------:|
 | OpenCV function |  0.0434471 s |
