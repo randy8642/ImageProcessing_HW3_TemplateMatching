@@ -59,32 +59,29 @@ def createSubsampleImgs(originImage, originTemplate):
 ### Template Matching
 使用Normalized Correlation Coefficient計算圖片與模板的相似度
 ```python
-def templateMatching(img, temp):
+def templateMatching(img, T):
    # 將圖片依照模板大小重新排列/裁切
-   sub_matrices = change2ConvView(img, temp)
-
-   # 取得模板的長寬
-   template_h, template_w = temp.shape
+   I = change2ConvView(img, T)
    
-   # 計算normalized Template
-   T_norm = temp - np.mean(temp)
-   # 計算normalized mean Image  
-   I_norm_mean = np.einsum('klij->kl', sub_matrices) / (template_w*template_h)
+   # 取得模板的長寬
+   template_h, template_w = T.shape
+   c = template_h * template_w
 
-   # 分子部分
-   m = np.einsum('ij,klij->kl', T_norm, sub_matrices)
-   n = I_norm_mean * np.sum(T_norm)
+   # 計算T(模板)總和與I(圖片區塊)總和
+   T_sum = np.einsum('ij->', T)
+   I_sum = np.einsum('klij->kl', I)
 
-   # 分母部分
-   T_norm_sum = np.sum(T_norm**2)   
-   I_norm_sum = np.einsum('klij,klij->kl', sub_matrices, sub_matrices) \
-                  - 2 * np.einsum('klij->kl', sub_matrices) * I_norm_mean \
-                  + (template_w*template_h) * I_norm_mean**2
+   # 使用covariant方式計算
+   # E(XY) - (x平均 * y平均)
+   m = np.einsum('ij,klij->kl', T, I)
+   n = T_sum * I_sum / c
 
-   # 結果
-   R = (m - n) / np.sqrt(T_norm_sum * I_norm_sum)
+   # var(X') = cov(X', X') = E(XX) - (x平均 * x平均)
+   I_var = np.einsum('klij->kl', change2ConvView(img**2, T)) - I_sum**2 / c
+   T_var = np.einsum('ij->', T**2) - T_sum**2 / c
+   b = np.sqrt(T_var * I_var)
 
-   return R
+   return (m - n) / b
 ```
 
 ### de-duplicate
@@ -159,7 +156,7 @@ template_gray = convertBGR2GRAY(template)
 ### Step 2 : Template Matching
 ```python
 results_loc, results_sim = \
-   speedUp_subsample(img_gray, template_gray, templateMatching, threshold)
+   speedUp_subsample(img_gray, template_gray, threshold)
 ```
 細部過程
 1. 將影像降採樣數次  
@@ -170,25 +167,24 @@ results_loc, results_sim = \
    ```python
    R = templateMatching_function(padded_img_gray, now_template)
    ```
-3. 找到大於threshold的座標，並清除相近的點
+3. 找到大於threshold的座標，並清除相近的點(若不為第一次找到的點，則取最大值)
    ```python
    if now_level == len(sample_imgs) - 1:
       loc = np.where( R >= threshold)
+      points_loc = np.array([[i, j] for i, j in zip(*loc)])
+      points_sim = np.array([R[i, j] for i, j in zip(*loc)])
+      targetPoint, _ = deduplicate(points_loc, points_sim, sample_imgs[now_level].shape[1]*0.1)
    else:
       loc = np.where( R >= R.max())
-   ```
-   ```python
-   points_loc = np.array([[i, j] for i, j in zip(*loc)])
-   points_sim = np.array([R[i, j] for i, j in zip(*loc)])
-   targetPoint, _ = deduplicate(points_loc, points_sim, sample_imgs[now_level].shape[1]*0.1)
+      targetPoint = [[loc[0][0], loc[1][0]]]
    ```
 4. 回到次解析度的圖片，並將目標點附近的影像裁切下來
    ```python
    # 計算要裁切的邊界(包含template大小以及附近的幾個pixel)
-   h_upper = start_point[0] - 10
-   h_lower = start_point[0] + subimage_h + 10
-   w_upper = start_point[1] - 10
-   w_lower = start_point[1] + subimage_w + 10
+   h_upper = start_point[0] - 5
+   h_lower = start_point[0] + subimage_h + 5
+   w_upper = start_point[1] - 5
+   w_lower = start_point[1] + subimage_w + 5
 
    # 調整超出範圍的部分
    if h_upper < 0:
@@ -255,8 +251,9 @@ cv2.imwrite(f'./result/{imgbaseName}.jpg', img_result)
 ![](/result/Die2.jpg)
 
 ## 與OpenCV比較
-使用`100-1.jpg`/`100-2.jpg`/`100-3.jpg`/`100-4.jpg`共4張圖重複執行5次的平均結果比較
-| method          |  costTime   |
-|:----------------|------------:|
-| OpenCV function |  0.113902 s |
-| Self-developed  |  0.236849 s |
+使用`100-1.jpg`/`100-2.jpg`/`100-3.jpg`/`100-4.jpg`共4張圖重複執行10次的平均結果比較  
+測試程式碼請參考`speedBenchmark.py`檔案
+| method          |   costTime   |
+|:----------------|-------------:|
+| OpenCV function |  0.0434471 s |
+| Self-developed  |  0.0396262 s |

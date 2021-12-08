@@ -1,6 +1,7 @@
 import numpy as np
 import cv2
 import queue
+from multiprocessing.pool import ThreadPool
 
 def change2ConvView(x, y):
     # change view for conv
@@ -44,28 +45,29 @@ def deduplicate(location: np.ndarray, similarity: np.ndarray, threshold):
     
     return np.array(results_location), np.array(results_sim)
 
-def templateMatching(img, temp):
-    sub_matrices = change2ConvView(img, temp)
-
-    #
-    template_h, template_w = temp.shape
-    T_norm = temp - np.mean(temp)  
-    I_norm_mean = np.einsum('klij->kl', sub_matrices) / (template_w*template_h)
-
-    #
-    m = np.einsum('ij,klij->kl', T_norm, sub_matrices)
-    n = I_norm_mean * np.sum(T_norm)
-
+def templateMatching(img, T):
+    # 將圖片依照模板大小重新排列/裁切
+    I = change2ConvView(img, T)
     
-    T_norm_sum = np.sum(T_norm**2)
-    
-    I_norm_sum = np.einsum('klij,klij->kl', sub_matrices, sub_matrices) \
-                    - 2 * np.einsum('klij->kl', sub_matrices) * I_norm_mean \
-                    + (template_w*template_h) * I_norm_mean**2
+    # 取得模板的長寬
+    template_h, template_w = T.shape
+    c = template_h * template_w
 
-    R = (m - n) / np.sqrt(T_norm_sum * I_norm_sum)
+    # 計算T(模板)總和與I(圖片區塊)總和
+    T_sum = np.einsum('ij->', T)
+    I_sum = np.einsum('klij->kl', I)
 
-    return R
+    # 使用covariant方式計算
+    # E(XY) - (x平均 * y平均)
+    m = np.einsum('ij,klij->kl', T, I)
+    n = T_sum * I_sum / c
+
+    # var(X') = cov(X', X') = E(XX) - (x平均 * x平均)
+    I_var = np.einsum('klij->kl', change2ConvView(img**2, T)) - I_sum**2 / c
+    T_var = np.einsum('ij->', T**2) - T_sum**2 / c
+    b = np.sqrt(T_var * I_var)
+
+    return (m - n) / b
 
 def drawRec(img, loc, sim, t_w, t_h):
     for pt, similarity in zip(loc, sim):
@@ -81,20 +83,15 @@ def convertBGR2GRAY(img):
     res = res.astype(np.float32)
     return res
 
-def speedUp_subsample(img, templ, tm_function, threshold):
+
+def speedUp_subsample(img, templ, threshold):
     # sub sampling
     sample_imgs, sample_templates = createSubsampleImgs(img, templ)
 
-    # init. task
-    init_level = len(sample_imgs) - 1
-    que = queue.Queue()
-    # [init_level], [start_point], [w], [h]
-    que.put([init_level, np.array([0, 0]), sample_imgs[-1].shape[1], sample_imgs[-1].shape[0]])
-
     results_loc = []
     results_sim = []
-    while not que.empty():
-        now_level, start_point, subimage_w, subimage_h = que.get()  
+
+    def find(now_level, start_point, subimage_w, subimage_h):    
 
         now_template = sample_templates[now_level]
         now_img = sample_imgs[now_level]
@@ -102,10 +99,10 @@ def speedUp_subsample(img, templ, tm_function, threshold):
         template_h, template_w = now_template.shape
 
         # 裁切影像
-        h_upper = start_point[0] - 10
-        h_lower = start_point[0] + subimage_h + 10
-        w_upper = start_point[1] - 10
-        w_lower = start_point[1] + subimage_w + 10
+        h_upper = start_point[0] - 5
+        h_lower = start_point[0] + subimage_h + 5
+        w_upper = start_point[1] - 5
+        w_lower = start_point[1] + subimage_w + 5
 
         if h_upper < 0:
             h_upper = 0
@@ -117,7 +114,7 @@ def speedUp_subsample(img, templ, tm_function, threshold):
             w_lower = now_img.shape[1]
 
         cut_img = now_img[h_upper:h_lower, w_upper:w_lower]
-    
+
         
         # pad
         if (now_template.shape[0] >= cut_img.shape[0]) or (now_template.shape[1] >= cut_img.shape[1]):
@@ -131,32 +128,50 @@ def speedUp_subsample(img, templ, tm_function, threshold):
             padded_img_gray = cut_img
 
 
-        R = tm_function(padded_img_gray, now_template)
+        R = templateMatching(padded_img_gray, now_template)
 
         #     
         if now_level == len(sample_imgs) - 1:
             loc = np.where( R >= threshold)
+            points_loc = np.array([[i, j] for i, j in zip(*loc)])
+            points_sim = np.array([R[i, j] for i, j in zip(*loc)])
+            targetPoint, _ = deduplicate(points_loc, points_sim, sample_imgs[now_level].shape[1]*0.1)
         else:
             loc = np.where( R >= R.max())
-
-        points_loc = np.array([[i, j] for i, j in zip(*loc)])
-        points_sim = np.array([R[i, j] for i, j in zip(*loc)])
-        targetPoint, _ = deduplicate(points_loc, points_sim, sample_imgs[now_level].shape[1]*0.1)
-        
+            targetPoint = [[loc[0][0], loc[1][0]]]
+      
         if len(targetPoint) <= 0:       
-            continue    
+            return []    
+
         #
         if now_level == 0:  
             results_loc.append((targetPoint[0] + np.array([h_upper, w_upper])))      
             results_sim.append(R[(targetPoint[0])[0], (targetPoint[0])[1]])  
-            continue    
+            return []    
         #
         targetPoint = targetPoint + np.array([h_upper, w_upper]) + [template_h//2, template_w//2]
-    
+
+        result = []
         for x, y in targetPoint:
             x_init = x - int(now_template.shape[0]*0.5) if x - now_template.shape[0]*0.5 > 0 else 0
             y_init = y - int(now_template.shape[1]*0.5) if y - now_template.shape[1]*0.5 > 0 else 0
 
-            que.put([now_level-1, (np.array([x_init, y_init]))*2, int((now_template.shape[1])*2), int((now_template.shape[0])*2)])
-    
+            result.append([now_level-1, (np.array([x_init, y_init]))*2, int((now_template.shape[1])*2), int((now_template.shape[0])*2)])
+
+        return result
+
+    pool = ThreadPool(processes=4)
+
+    # init. task
+    init_level = len(sample_imgs) - 1
+    que = queue.Queue()    
+
+    que.put(pool.apply_async(find, [init_level, np.array([0, 0]), sample_imgs[-1].shape[1], sample_imgs[-1].shape[0]]))
+    while not que.empty():
+        r = que.get()
+        for rr in r.get():
+            que.put(pool.apply_async(find, rr))
+      
+   
+
     return results_loc, results_sim
